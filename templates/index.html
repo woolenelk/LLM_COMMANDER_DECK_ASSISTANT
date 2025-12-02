@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Commander Builder</title>
+    <!-- FIX: Removed Markdown formatting from the src URL -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .card-grid-item { transition: transform 0.2s; }
+        .card-grid-item:hover { transform: scale(1.05); z-index: 10; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center font-bold shadow-lg shadow-purple-900/50">C</div>
+            <h1 class="text-xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white to-purple-200">Commander Architect</h1>
+        </div>
+
+        <div class="flex items-center gap-4 text-sm">
+            <div id="price-display" class="bg-green-900/50 border border-green-700 text-green-200 px-3 py-1 rounded backdrop-blur-sm">
+                Est. Price: <span id="total-price" class="font-mono font-bold">$0.00</span>
+            </div>
+            <div class="bg-gray-700 p-1 rounded-lg flex gap-1">
+                <button onclick="toggleView('list')" id="btn-list" class="px-3 py-1 rounded bg-gray-600 text-white shadow transition text-xs font-semibold flex items-center gap-1">
+                    <span>📄</span> List
+                </button>
+                <button onclick="toggleView('visual')" id="btn-visual" class="px-3 py-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition text-xs font-semibold flex items-center gap-1">
+                    <span>🖼️</span> Visual
+                </button>
+            </div>
+            <div class="h-6 w-px bg-gray-600 mx-2"></div>
+            <button onclick="exportDeck()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded transition shadow-lg shadow-blue-900/20">
+                Export
+            </button>
+            <button onclick="resetDeck()" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded transition shadow-lg shadow-red-900/20">
+                New
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Chat Panel -->
+        <div class="w-1/3 min-w-[350px] bg-gray-800 flex flex-col border-r border-gray-700 shadow-xl z-0">
+            <div id="chat-history" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="flex justify-start">
+                    <div class="bg-gray-700 rounded-lg p-3 max-w-[90%] text-sm border border-gray-600">
+                        Welcome! I am your Ollama Deck Builder. Tell me a Commander, a theme, or a budget to get started.
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-700 bg-gray-900">
+                <form id="chat-form" class="flex gap-2 items-end">
+                    <textarea id="user-input" 
+                        class="flex-1 bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-3 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all placeholder-gray-500 resize-none scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 max-h-60 overflow-hidden" 
+                        rows="1"
+                        placeholder="Type a message... (Shift+Enter for new line)"></textarea>
+                    <button type="submit" id="send-btn" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded font-semibold transition shadow-lg shadow-purple-900/20 h-10 mb-0.5">
+                        Send
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Deck Display Panel -->
+        <div class="flex-1 bg-gray-950 overflow-y-auto p-6 relative" id="deck-panel">
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 opacity-50 pointer-events-none">
+                <svg class="w-32 h-32 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                <p class="text-xl font-light">Deck list will appear here</p>
+            </div>
+            <div id="view-container">
+                <div id="deck-text-view" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20"></div>
+                <div id="deck-visual-view" class="hidden pb-20 space-y-8"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const emptyState = document.getElementById('empty-state');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const priceDisplay = document.getElementById('price-display');
+        const totalPriceEl = document.getElementById('total-price');
+        
+        const textView = document.getElementById('deck-text-view');
+        const visualView = document.getElementById('deck-visual-view');
+        const btnList = document.getElementById('btn-list');
+        const btnVisual = document.getElementById('btn-visual');
+
+        let currentDeckData = null; 
+        let activeView = 'list'; 
+        let renderSessionId = 0; 
+        let currentRunningTotal = 0.00; // Tracked globally for sending to backend
+
+        // --- View Toggling ---
+        function toggleView(mode) {
+            activeView = mode;
+            if (mode === 'list') {
+                textView.classList.remove('hidden');
+                visualView.classList.add('hidden');
+                btnList.classList.add('bg-gray-600', 'text-white', 'shadow');
+                btnList.classList.remove('text-gray-400');
+                btnVisual.classList.remove('bg-gray-600', 'text-white', 'shadow');
+                btnVisual.classList.add('text-gray-400');
+            } else {
+                textView.classList.add('hidden');
+                visualView.classList.remove('hidden');
+                btnVisual.classList.add('bg-gray-600', 'text-white', 'shadow');
+                btnVisual.classList.remove('text-gray-400');
+                btnList.classList.remove('bg-gray-600', 'text-white', 'shadow');
+                btnList.classList.add('text-gray-400');
+            }
+        }
+        toggleView('list');
+
+        // --- Auto-Resize ---
+        function resizeInput() {
+            userInput.style.height = 'auto';
+            userInput.style.height = (userInput.scrollHeight) + 'px';
+        }
+        userInput.addEventListener('input', resizeInput);
+        userInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('chat-form').requestSubmit();
+            }
+        });
+        resizeInput();
+
+        // --- Chat Functionality ---
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessageToChat(message, 'user');
+            userInput.value = '';
+            resizeInput();
+            setLoading(true);
+
+            try {
+                // SEND currentRunningTotal to backend so LLM knows budget
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: message,
+                        deckPrice: currentRunningTotal 
+                    })
+                });
+                const data = await response.json();
+
+                if (data.Deck) {
+                    renderDeck(data.Deck);
+                }
+                const msg = data.Message || "I've updated the deck list based on your request.";
+                addMessageToChat(msg, 'ai');
+
+            } catch (err) {
+                addMessageToChat("Error connecting to server.", 'ai');
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        function addMessageToChat(text, role) {
+            const div = document.createElement('div');
+            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`;
+            const formattedText = text.replace(/\n/g, '<br>');
+            div.innerHTML = `
+                <div class="${role === 'user' ? 'bg-purple-700 text-white' : 'bg-gray-700 text-gray-100'} rounded-lg p-3 max-w-[90%] text-sm shadow-md border ${role === 'user' ? 'border-purple-600' : 'border-gray-600'} whitespace-pre-wrap">${formattedText}</div>
+            `;
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function setLoading(isLoading) {
+            sendBtn.disabled = isLoading;
+            sendBtn.textContent = isLoading ? '...' : 'Send';
+            if (isLoading) userInput.disabled = true;
+            else {
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        async function resetDeck() {
+            if(confirm("Start a new deck? This will clear current memory.")) {
+                await fetch('/reset', { method: 'POST' });
+                location.reload();
+            }
+        }
+
+        // --- Deck Rendering ---
+        function renderDeck(deckData) {
+            currentDeckData = deckData;
+            emptyState.classList.add('hidden');
+            renderSessionId++;
+            const currentSession = renderSessionId;
+
+            textView.innerHTML = '';
+            visualView.innerHTML = '';
+            
+            // Reset Price
+            currentRunningTotal = 0;
+            totalPriceEl.textContent = "$0.00";
+
+            const categoryOrder = ["Commander", "Creatures", "Artifacts", "Enchantments", "Instants", "Sorceries", "Planeswalkers", "NonBasicLands", "Lands"];
+            let requestDelay = 0;
+
+            categoryOrder.forEach(cat => {
+                if (deckData[cat] && deckData[cat].length > 0) {
+                    // 1. Text Section
+                    const textSection = document.createElement('div');
+                    textSection.className = 'bg-gray-800/80 backdrop-blur rounded-xl p-4 shadow-lg border border-gray-700/50 flex flex-col h-full animate-fade-in';
+                    const textTitle = createSectionTitle(cat, deckData[cat].length);
+                    textSection.appendChild(textTitle);
+                    const textList = document.createElement('ul');
+                    textList.className = 'space-y-1 flex-1';
+                    textSection.appendChild(textList);
+                    textView.appendChild(textSection);
+
+                    // 2. Visual Section
+                    const visualSection = document.createElement('div');
+                    visualSection.className = 'animate-fade-in';
+                    const visualTitle = createSectionTitle(cat, deckData[cat].length);
+                    visualTitle.classList.add('mb-4');
+                    visualSection.appendChild(visualTitle);
+                    const visualGrid = document.createElement('div');
+                    visualGrid.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4';
+                    visualSection.appendChild(visualGrid);
+                    visualView.appendChild(visualSection);
+
+                    deckData[cat].forEach(cardName => {
+                        // Text Item
+                        const li = document.createElement('li');
+                        li.className = 'flex items-center justify-between text-sm group p-1.5 rounded hover:bg-gray-700/50 transition cursor-pointer';
+                        li.innerHTML = `
+                            <span class="truncate pr-2 text-gray-300 group-hover:text-white transition w-full">${cardName}</span>
+                            <span class="price-tag text-gray-500 text-xs font-mono min-w-[50px] text-right">...</span>
+                        `;
+                        li.onclick = () => window.open(`https://scryfall.com/search?q=${encodeURIComponent(cardName)}`, '_blank');
+                        textList.appendChild(li);
+
+                        // Grid Item
+                        const imgWrapper = document.createElement('div');
+                        imgWrapper.className = 'card-grid-item relative aspect-[2.5/3.5] rounded-lg overflow-hidden bg-gray-800 shadow-lg cursor-pointer group';
+                        imgWrapper.innerHTML = `
+                            <div class="absolute inset-0 flex items-center justify-center text-xs text-center text-gray-500 p-2">Loading ${cardName}...</div>
+                            <img src="" alt="${cardName}" class="card-img w-full h-full object-cover relative z-10 opacity-0 transition-opacity duration-300">
+                            <div class="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-[10px] p-1 text-center opacity-0 group-hover:opacity-100 transition z-20">
+                                ${cardName} <span class="price-overlay text-green-400 ml-1"></span>
+                            </div>
+                        `;
+                        imgWrapper.onclick = () => window.open(`https://scryfall.com/search?q=${encodeURIComponent(cardName)}`, '_blank');
+                        visualGrid.appendChild(imgWrapper);
+
+                        setTimeout(() => {
+                            if (currentSession === renderSessionId) {
+                                fetchCardData(cardName, li, imgWrapper);
+                            }
+                        }, requestDelay * 50);
+                        requestDelay++;
+                    });
+                }
+            });
+        }
+
+        function createSectionTitle(cat, count) {
+            const title = document.createElement('h3');
+            title.className = 'text-lg font-bold text-purple-400 mb-3 border-b border-gray-700 pb-2 flex justify-between items-center';
+            title.innerHTML = `
+                <span class="flex items-center gap-2">${getIconForCategory(cat)} ${cat}</span> 
+                <span class="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-full">${count}</span>
+            `;
+            return title;
+        }
+
+        function getIconForCategory(cat) {
+            const map = { 'Commander': '👑', 'Creatures': '🐉', 'Artifacts': '💍', 'Enchantments': '✨', 'Instants': '⚡', 'Sorceries': '🔥', 'Planeswalkers': '🧙‍♂️', 'NonBasicLands': '🏔️', 'Lands': '🌳' };
+            return map[cat] || '📄';
+        }
+
+        async function fetchCardData(cardName, textListItem, imageWrapperItem) {
+            const priceSpan = textListItem.querySelector('.price-tag');
+            const priceOverlay = imageWrapperItem.querySelector('.price-overlay');
+            const imgTag = imageWrapperItem.querySelector('.card-img');
+            
+            try {
+                const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`);
+                if (!res.ok) throw new Error('Not found');
+                const data = await res.json();
+                
+                // Price
+                const price = data.prices?.usd || data.prices?.usd_foil || "N/A";
+                const displayPrice = price === "N/A" ? "$-.--" : `$${price}`;
+                
+                priceSpan.textContent = displayPrice;
+                if (price !== "N/A") {
+                    priceSpan.classList.add('text-green-400');
+                    priceSpan.classList.remove('text-gray-500');
+                    updateTotal(parseFloat(price));
+                }
+                if (price !== "N/A") priceOverlay.textContent = `(${displayPrice})`;
+
+                // Image
+                let imageUrl = null;
+                if (data.image_uris?.normal) imageUrl = data.image_uris.normal;
+                else if (data.card_faces && data.card_faces.length > 0) imageUrl = data.card_faces[0].image_uris?.normal;
+
+                if (imageUrl) {
+                    imgTag.src = imageUrl;
+                    imgTag.onload = () => imgTag.classList.remove('opacity-0');
+                } else {
+                    imgTag.alt = "No Image Found";
+                }
+
+            } catch (err) {
+                // Hallucination Handling
+                priceSpan.textContent = "❌ Not Found";
+                priceSpan.classList.add('text-red-500', 'font-bold');
+                priceSpan.classList.remove('text-gray-500');
+                
+                imageWrapperItem.querySelector('.absolute.inset-0').textContent = "❌ Invalid Card";
+                imageWrapperItem.classList.add('border-2', 'border-red-500');
+            }
+        }
+
+        function updateTotal(amount) {
+            currentRunningTotal += amount;
+            totalPriceEl.textContent = `$${currentRunningTotal.toFixed(2)}`;
+        }
+
+        function exportDeck() {
+            if (!currentDeckData) return alert("No deck to export!");
+            let textContent = `Commander Deck Export\nGenerated by Ollama Builder\n\n`;
+            for (const [category, cards] of Object.entries(currentDeckData)) {
+                if (cards.length > 0) {
+                    textContent += `\n// ${category}\n`;
+                    cards.forEach(card => { textContent += `1 ${card}\n`; });
+                }
+            }
+            const blob = new Blob([textContent], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'commander-deck.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>

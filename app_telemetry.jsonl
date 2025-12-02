@@ -1,0 +1,4 @@
+{"timestamp": "2025-12-02T17:52:26.096138", "pathway": "perplexity_api", "latency_sec": 11.85, "model": "sonar-pro"}
+{"timestamp": "2025-12-02T17:52:37.196147", "pathway": "perplexity_api", "latency_sec": 11.1, "model": "sonar-pro"}
+{"timestamp": "2025-12-02T17:54:05.871218", "pathway": "tool_augmented_generation", "latency_sec": 113.5, "model": "qwen2.5:14b"}
+{"timestamp": "2025-12-02T17:56:00.417460", "pathway": "tool_augmented_generation", "latency_sec": 114.51, "model": "qwen2.5:14b"}
